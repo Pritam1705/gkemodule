@@ -1,57 +1,61 @@
-# main.tf
+resource "google_container_cluster" "standard" {
+  for_each = {
+    for k, v in var.clusters : k => v if v.autopilot == false
+  }
 
-resource "google_container_cluster" "primary" {
-  name     = var.cluster.name
-  location = var.cluster.location
+  name     = each.value.name
+  location = each.value.location
   project  = var.project_id
-  network  = var.network
+
+  network    = var.network
   subnetwork = var.subnetwork
 
-  initial_node_count       = 1
   remove_default_node_pool = true
   deletion_protection      = false
+  initial_node_count       = lookup(each.value, "initial_node_count", 1)
 
   dynamic "private_cluster_config" {
-    for_each = lookup(var.cluster, "enable_private_nodes", false) ? [1] : []
-
+    for_each = lookup(each.value, "enable_private_nodes", false) ? [1] : []
     content {
       enable_private_nodes    = true
       enable_private_endpoint = false
-      master_ipv4_cidr_block  = var.cluster.master_ipv4_cidr_block
-    }
-  }
-
-  node_config {
-    machine_type    = var.cluster.default_node_config.machine_type
-    disk_size_gb    = var.cluster.default_node_config.disk_size_gb
-    disk_type       = var.cluster.default_node_config.disk_type
-    service_account = var.use_existing_sa ? var.service_account_email : google_service_account.gke_sa[0].email
-
-    metadata = {
-      disable-legacy-endpoints = "true"
+      master_ipv4_cidr_block  = each.value.master_ipv4_cidr_block
     }
   }
 }
 
-resource "google_container_node_pool" "nodepools" {
-  for_each = var.node_pools
+resource "google_container_node_pool" "standard_nodepool" {
+  for_each = merge([
+    for cluster_key, cluster_val in var.clusters : (
+      cluster_val.autopilot == false ?
+      { for np_key, np_val in lookup(cluster_val, "node_pools", {}) :
+        "${cluster_key}-${np_key}" => {
+          cluster_key  = cluster_key
+          cluster_name = cluster_val.name
+          cluster_loc  = cluster_val.location
+          np_key       = np_key
+          np_val       = np_val
+        }
+      } : {}
+    )
+  ]...)
 
-  name     = each.key
-  location = var.cluster.location
-  cluster  = google_container_cluster.primary.name
-  project  = var.project_id
+  name       = each.value.np_key
+  location   = each.value.cluster_loc
+  cluster    = google_container_cluster.standard[each.value.cluster_key].name
+  project    = var.project_id
 
-  node_count = lookup(each.value, "initial_node_count", 1)
+  node_count = lookup(each.value.np_val, "node_count", 1)
 
   autoscaling {
-    min_node_count = lookup(each.value, "min_node_count", 1)
-    max_node_count = lookup(each.value, "max_node_count", 3)
+    min_node_count = lookup(each.value.np_val, "min_node_count", 1)
+    max_node_count = lookup(each.value.np_val, "max_node_count", 3)
   }
 
   node_config {
-    machine_type    = each.value.node_config.machine_type
-    disk_size_gb    = each.value.node_config.disk_size_gb
-    disk_type       = each.value.node_config.disk_type
+    machine_type    = each.value.np_val.machine_type
+    disk_size_gb    = each.value.np_val.disk_size_gb
+    disk_type       = each.value.np_val.disk_type
     service_account = var.use_existing_sa ? var.service_account_email : google_service_account.gke_sa[0].email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
 
@@ -59,11 +63,11 @@ resource "google_container_node_pool" "nodepools" {
       disable-legacy-endpoints = "true"
     }
 
-    preemptible = lookup(each.value.node_config, "spot", false)
-    labels      = lookup(each.value.node_config, "labels", {})
+    preemptible = lookup(each.value.np_val, "spot", false)
+    labels      = lookup(each.value.np_val, "labels", {})
 
     dynamic "taint" {
-      for_each = lookup(each.value.node_config, "taints", [])
+      for_each = lookup(each.value.np_val, "taints", [])
       content {
         key    = taint.value.key
         value  = taint.value.value
@@ -71,20 +75,9 @@ resource "google_container_node_pool" "nodepools" {
       }
     }
 
-    dynamic "shielded_instance_config" {
-      for_each = [1]
-      content {
-        enable_secure_boot          = true
-        enable_integrity_monitoring = true
-      }
-    }
-
-    dynamic "guest_accelerator" {
-      for_each = lookup(each.value.node_config, "guest_accelerators", [])
-      content {
-        type  = guest_accelerator.value.type
-        count = guest_accelerator.value.count
-      }
+    shielded_instance_config {
+      enable_secure_boot          = true
+      enable_integrity_monitoring = true
     }
   }
 
@@ -97,6 +90,20 @@ resource "google_container_node_pool" "nodepools" {
     max_surge       = 1
     max_unavailable = 0
   }
+}
+
+resource "google_container_cluster" "autopilot" {
+  for_each = {
+    for k, v in var.clusters : k => v if v.autopilot == true
+  }
+
+  name                = each.value.name
+  location            = each.value.location
+  project             = var.project_id
+  network             = var.network
+  subnetwork          = var.subnetwork
+  deletion_protection = false
+  enable_autopilot    = true
 }
 
 resource "google_service_account" "gke_sa" {
