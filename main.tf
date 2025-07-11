@@ -54,6 +54,7 @@ resource "google_container_node_pool" "standard_nodepool" {
 
   node_config {
     machine_type    = each.value.np_val.machine_type
+    image_type      = each.value.np_val.image_type
     disk_size_gb    = each.value.np_val.disk_size_gb
     disk_type       = each.value.np_val.disk_type
     service_account = var.use_existing_sa ? var.service_account_email : google_service_account.gke_sa[0].email
