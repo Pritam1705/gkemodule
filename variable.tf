@@ -56,6 +56,7 @@ variable "clusters" {
       min_node_count = optional(number, 1)
       max_node_count = optional(number, 3)
       machine_type   = string
+      image_type     = string
       disk_size_gb   = number
       disk_type      = string
       spot           = optional(bool, false)
