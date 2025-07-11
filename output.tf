@@ -1,11 +1,19 @@
 output "standard_cluster_names" {
-  value = [for k, v in google_container_cluster.standard : v.name]
+  value = [for c in google_container_cluster.standard : c.name]
 }
 
 output "autopilot_cluster_names" {
-  value = [for k, v in google_container_cluster.autopilot : v.name]
+  value = [for c in google_container_cluster.autopilot : c.name]
 }
 
-output "standard_node_pool_names" {
-  value = [for k, v in google_container_node_pool.standard_nodepool : v.name]
+output "cluster_endpoints" {
+  value = {
+    for k, c in google_container_cluster.standard : k => c.endpoint
+  }
+}
+
+output "autopilot_endpoints" {
+  value = {
+    for k, c in google_container_cluster.autopilot : k => c.endpoint
+  }
 }
