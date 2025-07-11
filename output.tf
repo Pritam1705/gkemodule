@@ -1,23 +1,19 @@
-# modules/gke/outputs.tf
-
 output "standard_cluster_names" {
-  description = "Names of standard (non-autopilot) clusters"
-  value       = [for k, v in google_container_cluster.standard : v.name]
+  value = [for c in google_container_cluster.standard : c.name]
 }
 
 output "autopilot_cluster_names" {
-  description = "Names of autopilot clusters"
-  value       = [for k, v in google_container_cluster.autopilot : v.name]
+  value = [for c in google_container_cluster.autopilot : c.name]
 }
 
-output "standard_node_pool_names" {
-  description = "Names of node pools in standard clusters"
-  value       = [for k, v in google_container_node_pool.standard_nodepool : v.name]
+output "cluster_endpoints" {
+  value = {
+    for k, c in google_container_cluster.standard : k => c.endpoint
+  }
 }
 
-output "service_account_email" {
-  description = "Service account email used for GKE clusters"
-  value = var.use_existing_sa ? var.service_account_email : (
-    length(google_service_account.gke_sa) > 0 ? google_service_account.gke_sa[0].email : null
-  )
+output "autopilot_endpoints" {
+  value = {
+    for k, c in google_container_cluster.autopilot : k => c.endpoint
+  }
 }
