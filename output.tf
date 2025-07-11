@@ -1,3 +1,5 @@
+# modules/gke/outputs.tf
+
 output "standard_cluster_names" {
   description = "Names of standard (non-autopilot) clusters"
   value       = [for k, v in google_container_cluster.standard : v.name]
